@@ -1,0 +1,53 @@
+# Secrets and local environment files
+.env
+*.env
+k.env
+
+# Python cache and virtual environments
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+venv_*/
+
+# Node dependencies
+node_modules/
+npm-debug.log*
+
+# Model weights and exported model artifacts
+*.pt
+*.pth
+*.onnx
+*.engine
+*.tflite
+*.torchscript
+model/
+models/
+
+# Datasets and local test images
+train/
+valid/
+test/
+test_images/
+labels.cache
+
+# Detection, validation, and benchmark outputs
+runs/
+model_eval_results*/
+results/
+*.csv
+*.xlsx
+*.json
+*.png
+*.jpg
+*.jpeg
+
+# Downloaded third-party repositories
+yolov7/
+yolov5/
+
+# OS/editor files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
