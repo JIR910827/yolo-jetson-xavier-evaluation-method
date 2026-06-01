@@ -35,7 +35,6 @@ labels.cache
 runs/
 model_eval_results*/
 results/
-resource_monitor_results*/
 batch_inference_results*/
 *.csv
 *.xlsx
