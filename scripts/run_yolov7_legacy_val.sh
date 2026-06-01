@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-cd "${ETH_CONTRACT_DIR:-$HOME/eth-contract}"
+cd "${YOLO_EVAL_DIR:-$PWD}"
 
 if [ ! -d "venv_yolov7" ]; then
   python3.8 -m venv --system-site-packages venv_yolov7

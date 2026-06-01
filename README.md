@@ -1,8 +1,8 @@
 # YOLO Model Evaluation Method on Jetson Xavier NX
 
-This repository provides a reproducible method for evaluating screw defect detection models on NVIDIA Jetson Xavier NX and, when required, uploading recognition metadata to a private Ethereum smart contract.
+This repository provides a reproducible method for comparing YOLO model performance on NVIDIA Jetson Xavier NX.
 
-The repository is designed as a method package. It does not include model weights, image datasets, validation outputs, private keys, local environment files, or device-specific addresses.
+The main focus is model evaluation on edge hardware: detection metrics, inference speed, latency, FPS, and Jetson resource usage.
 
 ## Scope
 
@@ -10,8 +10,8 @@ The workflow covers four tasks:
 
 1. Verify that a YOLO model can run on Jetson Xavier NX.
 2. Evaluate multiple YOLO models with common detection metrics.
-3. Run batch inference on screw images.
-4. Upload image hash and recognition metadata to an Ethereum private chain.
+3. Run batch inference on test images.
+4. Record Jetson CPU/GPU/RAM, disk I/O, and network usage during evaluation.
 
 ## Suggested Project Layout
 
@@ -31,11 +31,9 @@ Use a project directory on the Jetson device and place data under generic subdir
     labels/
   test_images/
   scripts/
-  VisualRecordContract.abi.json
-  VisualRecordContract.address.txt
 ```
 
-`model/` stores model weights, `train/images` and `train/labels` store YOLO-format validation data, and `test_images/` stores images used for batch recognition. These directories are intentionally ignored by Git.
+`model/` stores model weights, `train/images` and `train/labels` store YOLO-format validation data, and `test_images/` stores images used for batch inference. These directories are intentionally ignored by Git.
 
 ## Installation
 
@@ -76,93 +74,23 @@ Install common inference and evaluation packages:
 python3 -m pip install -U ultralytics pandas matplotlib scipy pyyaml pillow opencv-python
 ```
 
-### 3. Node.js and Ethereum Contract Access
-
-The upload and query scripts use `web3@1.10.0`.
+Install resource monitoring tools:
 
 ```bash
-cd <PROJECT_DIR>
-npm init -y
-npm install web3@1.10.0
+sudo apt-get update
+sudo apt-get install -y sysstat ifstat
+sudo -H pip3 install -U jetson-stats
 ```
 
-The Ethereum private-chain RPC endpoint and contract files are configured through environment variables or local files:
+After installing `jetson-stats`, log out and log in again if `jtop` asks for group permission refresh.
 
-```bash
-export ETH_RPC_URL="http://127.0.0.1:8545"
-export CONTRACT_ABI_PATH="VisualRecordContract.abi.json"
-export CONTRACT_ADDRESS_PATH="VisualRecordContract.address.txt"
-export DEVICE_ID="jetson-xavier-nx-0"
-```
-
-If the legacy HTTP API mode is used, configure the API URL explicitly:
-
-```bash
-export BLOCKCHAIN_API_URL="http://<BLOCKCHAIN_API_HOST>:3000/iotBlockChain/CreateVisualRecord"
-```
-
-## Script Usage
-
-### 1. YOLO26 Smoke Test
+## YOLO26 Smoke Test
 
 This step verifies that the model, Python environment, and CUDA runtime can complete inference on the target device.
 
 ```bash
 cd <PROJECT_DIR>
 bash scripts/run_yolo26_smoke_test_jetson.sh
-```
-
-### 2. Batch Recognition and On-Chain Upload
-
-This command reads images from `test_images/`, performs YOLO inference, computes SHA-256 image hashes, and writes visual records to the smart contract.
-
-```bash
-cd <PROJECT_DIR>
-python3 scripts/batch_detect_screw_upload.py \
-  --model model/screw_yolov26.pt \
-  --images test_images \
-  --device 0 \
-  --empty-status Fail
-```
-
-The uploaded `Result` field is stored as a JSON string. The main fields are:
-
-```text
-product_type
-status
-class_name
-is_defect
-confidence
-boxes
-```
-
-### 3. Query On-Chain Visual Records
-
-Query all records:
-
-```bash
-cd <PROJECT_DIR>
-node scripts/query_visual_records.js
-```
-
-Query one record:
-
-```bash
-node scripts/query_visual_records.js --id <RECORD_ID>
-```
-
-### 4. Upload One Recognition Record
-
-```bash
-cd <PROJECT_DIR>
-node scripts/upload_recognition_to_chain.js \
-  --id screw-test-001 \
-  --datetime "2026-05-31 20:00:00" \
-  --image test_images/sample.jpg \
-  --status Ok \
-  --class-name Ok \
-  --confidence 0.93 \
-  --device-id jetson-xavier-nx-0
 ```
 
 ## Multi-Model Evaluation
@@ -218,6 +146,75 @@ Latency
 
 The output directory, such as `model_eval_results_val/`, is an experimental result and should not be committed.
 
+## Batch Inference
+
+For image folders without YOLO labels, use the batch inference script to record predictions and timing. This is useful for practical detection speed checks when only test images are available.
+
+```bash
+cd <PROJECT_DIR>
+python3 scripts/evaluate_screw_models.py \
+  --model-dir model \
+  --images test_images \
+  --output-dir batch_inference_results \
+  --device 0 \
+  --imgsz 640
+```
+
+Use validation metrics when labels are available, and use batch inference timing when labels are not available.
+
+## Jetson Resource Monitoring
+
+For performance tests, use the same structure as the previous HYF evaluation method:
+
+```text
+resource_monitor_results/
+  CPU_GPU_RAM/CPU_GPU_RAM_log.csv
+  Disk/Disk_log.txt
+  Net/Net_log.txt
+  monitor_command.txt
+```
+
+Run a fixed-duration resource sample:
+
+```bash
+cd <PROJECT_DIR>
+python3 scripts/monitor_jetson_resources.py --duration 300
+```
+
+Wrap a YOLO evaluation command so resource logs cover the whole test:
+
+```bash
+cd <PROJECT_DIR>
+python3 scripts/monitor_jetson_resources.py \
+  --output-dir resource_monitor_results/yolov8_val \
+  -- \
+  python3 scripts/evaluate_yolo_val_models.py \
+    --data screw_eval.yaml \
+    --model-dir model \
+    --output-dir model_eval_results_val \
+    --device 0 \
+    --imgsz 640 \
+    --batch 1
+```
+
+The monitor records:
+
+```text
+CPU/GPU/RAM: jtop / jetson-stats
+Disk I/O: iostat mmcblk0 -dkt 1
+Network I/O: ifstat -t 1
+```
+
+Compare resource logs with `summary_val.csv` to explain whether bottlenecks come from inference compute, memory pressure, disk I/O, or network traffic.
+
+The CPU/GPU/RAM resource CSV follows the earlier performance-log style:
+
+```text
+time, CPU_Average, GPU, RAM, kB_read/s, kB_wrtn/s, ...
+```
+
+Use this time-series data together with the model metric CSV to compare each YOLO version under the same Jetson workload conditions.
+
 ## YOLOv7 Legacy Evaluation
 
 Some YOLOv7 checkpoints cannot be loaded directly by the Ultralytics package because they depend on the original YOLOv7 module structure or older pickle/numpy references. In that case, evaluate YOLOv7 with the original YOLOv7 repository in a separate virtual environment.
@@ -256,7 +253,27 @@ python test.py \
 ```
 
 
+## Files Excluded from Version Control
+
+The following files and directories are excluded because they may contain large binary files, experimental outputs, or environment-specific information:
+
+```text
+*.pt
+*.onnx
+*.engine
+model/
+train/
+valid/
+test_images/
+runs/
+model_eval_results*/
+batch_inference_results*/
+resource_monitor_results*/
+node_modules/
+*.env
+k.env
+```
 
 ## Research Workflow Summary
 
-The method connects AOI recognition and blockchain-based traceability. A YOLO model first performs screw defect detection on Jetson Xavier NX. The system then calculates an image hash and combines it with recognition metadata, confidence scores, device ID, and timestamps. Finally, the metadata is written to an Ethereum private-chain smart contract so that inspection records can be queried and verified later.
+This method compares YOLO model behavior on Jetson Xavier NX under the same evaluation settings. The final report should combine detection metrics, inference timing, FPS, latency, and resource usage so that each YOLO version can be compared fairly on edge hardware.
