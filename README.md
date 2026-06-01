@@ -255,26 +255,7 @@ python test.py \
   --no-trace
 ```
 
-## Files Excluded from Version Control
 
-The following files and directories are excluded because they may contain large binary files, experimental outputs, or environment-specific information:
-
-```text
-*.pt
-*.onnx
-*.engine
-model/
-train/
-valid/
-test_images/
-runs/
-model_eval_results*/
-node_modules/
-*.env
-k.env
-VisualRecordContract.address.txt
-VisualRecordContract.abi.json
-```
 
 ## Research Workflow Summary
 
